@@ -8,6 +8,20 @@ import re
 import ast
 import traceback  # Added for better error tracing
 
+async def execute_tool(mcp_client, tool_name, input_params=None):
+        """Execute a specific MCP tool and process it's results"""
+        try:
+            input_params = input_params or {}
+            print(f"\nExecuting {tool_name} with parameters: {input_params}")
+            result = await mcp_client.call_tool(tool_name, input_params)
+            await process_tool_result(result)
+            return result
+        except Exception as e:
+            print(f"Error executing {tool_name}: {e}")
+            print(traceback.format_exc())
+            return None
+
+
 async def process_tool_result(result):
     "Process and display called MCP tools in a consistent format."
     if hasattr(result, 'content') and result.content:
@@ -25,6 +39,7 @@ async def process_tool_result(result):
             pass
     else:
         print(result)
+
 
 async def mcp_read_query(mcp_client, sql):
     try:
@@ -133,7 +148,7 @@ Remember to always use the query parameter, not sql."""
         # Start interactive prompt loop
         print("\nDatabase assistant ready! Type SQL queries or questions about your database.")
         print("Example: 'read_query select * from sqlite_master;'")
-        print("Additional commands: 'list_tables', 'describe-table <table_name>'")
+        print("Additional commands: 'list_tables', 'describe_table <table_name>'")
         
         while True:
             try:
@@ -152,26 +167,13 @@ Remember to always use the query parameter, not sql."""
                     # Execute direct SQL query
                     await mcp_read_query(mcp_client, sql)
                 
-                # Special case for direct list_tables command
+
                 elif user_prompt.strip() == 'list_tables':
-                    try:
-                        result = await mcp_client.call_tool("list_tables", {})
-                        print("\nAvailable tables:")
-                        await process_tool_result(result)
-                    except Exception as e:
-                        print(f"Error listing tables: {e}")
-                        print(traceback.format_exc())
+                    await execute_tool(mcp_client, "list_tables", {})
                 
-                # Special case for direct describe-table command
-                elif user_prompt.strip().startswith('describe-table '):
-                    table_name = user_prompt.replace('describe-table ', '', 1).strip()
-                    try:
-                        result = await mcp_client.call_tool("describe_table", {"table_name": table_name})
-                        print(f"\nSchema for table: {table_name}")
-                        await process_tool_result(result)
-                    except Exception as e:
-                        print(f"Error describing table: {e}")
-                        print(traceback.format_exc())
+                elif user_prompt.strip().startswith('describe_table '):
+                    table_name = user_prompt.replace('describe_table ', '', 1).strip()
+                    await execute_tool(mcp_client, "describe_table", {"table_name": table_name})
                     
                 else:
                     # Process natural language prompt through the agent
