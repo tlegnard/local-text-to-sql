@@ -8,31 +8,30 @@ import re
 import ast
 import traceback  # Added for better error tracing
 
+async def process_tool_result(result):
+    "Process and display called MCP tools in a consistent format."
+    if hasattr(result, 'content') and result.content:
+        text_content = result.content[0].text if result.content[0].text \
+            else "No data returned."
+        print(text_content)
+
+        #format to json if possible
+        try:
+            python_obj = ast.literal_eval(text_content)
+            print("\nFormatted result:")
+            print(json.dumps(python_obj, indent=2))
+        except (SyntaxError, ValueError):
+            # If not valid Python or JSON, just show as is 
+            pass
+    else:
+        print(result)
 
 async def mcp_read_query(mcp_client, sql):
     try:
         result = await mcp_client.call_tool("read_query", {"query": sql})
         print("\nQuery result:")
         # print(result)  # This might be printing a complex object that doesn't format well
-        if hasattr(result, 'content') and result.content:
-            # Get the text from the first content item
-            text_content = result.content[0].text if result.content[0].text else "No data returned"
-            print(text_content)
-            
-            # Try to format as JSON if possible
-            try:
-                # The text might be a string representation of a Python list/dict
-                # Convert Python syntax to proper JSON first
-
-                python_obj = ast.literal_eval(text_content)
-
-                print("\nFormatted result:")
-                print(json.dumps(python_obj, indent=2))
-            except (SyntaxError, ValueError):
-                # If not valid Python or JSON, just show as is
-                pass
-        else:
-            print(result)
+        await process_tool_result(result)
 
     except Exception as e:
         print(f"SQL query error: {e}")
@@ -158,19 +157,7 @@ Remember to always use the query parameter, not sql."""
                     try:
                         result = await mcp_client.call_tool("list_tables", {})
                         print("\nAvailable tables:")
-                        if hasattr(result, 'content') and result.content:
-                            text_content = result.content[0].text if result.content[0].text else "No tables found"
-                            print(text_content)
-                            
-                            # Try to format as JSON if possible
-                            try:
-                                python_obj = ast.literal_eval(text_content)
-                                print("\nFormatted result:")
-                                print(json.dumps(python_obj, indent=2))
-                            except (SyntaxError, ValueError):
-                                pass
-                        else:
-                            print(result)
+                        await process_tool_result(result)
                     except Exception as e:
                         print(f"Error listing tables: {e}")
                         print(traceback.format_exc())
@@ -181,19 +168,7 @@ Remember to always use the query parameter, not sql."""
                     try:
                         result = await mcp_client.call_tool("describe_table", {"table_name": table_name})
                         print(f"\nSchema for table: {table_name}")
-                        if hasattr(result, 'content') and result.content:
-                            text_content = result.content[0].text if result.content[0].text else "No schema found"
-                            print(text_content)
-                            
-                            # Try to format as JSON if possible
-                            try:
-                                python_obj = ast.literal_eval(text_content)
-                                print("\nFormatted result:")
-                                print(json.dumps(python_obj, indent=2))
-                            except (SyntaxError, ValueError):
-                                pass
-                        else:
-                            print(result)
+                        await process_tool_result(result)
                     except Exception as e:
                         print(f"Error describing table: {e}")
                         print(traceback.format_exc())
@@ -219,35 +194,11 @@ Remember to always use the query parameter, not sql."""
                             elif "name" in response and response["name"] == "list_tables":
                                 print("Listing all tables in the database:")
                                 result = await mcp_client.call_tool("list_tables", {})
-                                if hasattr(result, 'content') and result.content:
-                                    text_content = result.content[0].text if result.content[0].text else "No tables found"
-                                    print(text_content)
-                                    
-                                    # Try to format as JSON if possible
-                                    try:
-                                        python_obj = ast.literal_eval(text_content)
-                                        print("\nFormatted result:")
-                                        print(json.dumps(python_obj, indent=2))
-                                    except (SyntaxError, ValueError):
-                                        pass
-                                else:
-                                    print(result)
+                                await process_tool_result(result)
                             elif "name" in response and response["name"] == "describe_table":
                                 print(f"Describing table: {response['input'].get('table_name', 'Unknown')}")
                                 result = await mcp_client.call_tool("describe_table", {"table_name": response['input'].get('table_name', '')})
-                                if hasattr(result, 'content') and result.content:
-                                    text_content = result.content[0].text if result.content[0].text else "No schema found"
-                                    print(text_content)
-                                    
-                                    # Try to format as JSON if possible
-                                    try:
-                                        python_obj = ast.literal_eval(text_content)
-                                        print("\nFormatted result:")
-                                        print(json.dumps(python_obj, indent=2))
-                                    except (SyntaxError, ValueError):
-                                        pass
-                                else:
-                                    print(result)
+                                await process_tool_result(result)
                             else:
                                 print("\nResponse:", response)
                         
@@ -263,35 +214,11 @@ Remember to always use the query parameter, not sql."""
                                     elif "name" in response_obj and response_obj["name"] == "list_tables":
                                         print("Listing all tables in the database:")
                                         result = await mcp_client.call_tool("list_tables", {})
-                                        if hasattr(result, 'content') and result.content:
-                                            text_content = result.content[0].text if result.content[0].text else "No tables found"
-                                            print(text_content)
-                                            
-                                            # Try to format as JSON if possible
-                                            try:
-                                                python_obj = ast.literal_eval(text_content)
-                                                print("\nFormatted result:")
-                                                print(json.dumps(python_obj, indent=2))
-                                            except (SyntaxError, ValueError):
-                                                pass
-                                        else:
-                                            print(result)
+                                        await process_tool_result(result)
                                     elif "name" in response_obj and response_obj["name"] == "describe_table":
                                         print(f"Describing table: {response_obj['input'].get('table_name', 'Unknown')}")
                                         result = await mcp_client.call_tool("describe_table", {"table_name": response_obj['input'].get('table_name', '')})
-                                        if hasattr(result, 'content') and result.content:
-                                            text_content = result.content[0].text if result.content[0].text else "No schema found"
-                                            print(text_content)
-                                            
-                                            # Try to format as JSON if possible
-                                            try:
-                                                python_obj = ast.literal_eval(text_content)
-                                                print("\nFormatted result:")
-                                                print(json.dumps(python_obj, indent=2))
-                                            except (SyntaxError, ValueError):
-                                                pass
-                                        else:
-                                            print(result)
+                                        await process_tool_result(result)
                                     else:
                                         print("\nResponse:", response_obj)
                                 except json.JSONDecodeError:
@@ -322,3 +249,5 @@ Remember to always use the query parameter, not sql."""
 if __name__ == "__main__":
     # Run the async main function
     asyncio.run(main())
+
+
