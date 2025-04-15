@@ -7,6 +7,25 @@ import json
 import re
 import ast
 import traceback
+from enum import Enum, auto
+
+class ToolType(Enum):
+    READ_QUERY = "read_query"
+    LIST_TABLES= "list_tables"
+    DESCRIBE_TABLE = "describe_table"
+
+    @classmethod
+    def get_param_schema(cls, tool_type, args=None):
+        """setup parameter specific  schema for each tool type."""
+        args = args if args is not None else ""
+        if tool_type == cls.READ_QUERY:
+            return {"query": args}
+        elif tool_type == cls.DESCRIBE_TABLE:
+            return {"table_name": args}
+        elif tool_type == cls.LIST_TABLES:
+            return {}
+        else:
+            return {}
 
 async def execute_tool(mcp_client, tool_name, input_params=None):
         """Execute a specific MCP tool and process it's results"""
@@ -53,29 +72,39 @@ async def process_and_execute_tool_response(response, mcp_client):
 
     if isinstance(response_obj, dict) and "name" in response_obj \
         and "input" in response_obj:
-        tool_name = response_obj["name"]
-        tool_input = response_obj["input"]
+        try:
+            tool_name = response_obj["name"]
+            tool_input = response_obj["input"]
+            tool_type = ToolType(tool_name)
 
-        if tool_name == "read_query":
-            return await execute_tool(mcp_client, "read_query", {"query": tool_input.get("query","")})
-        elif tool_name == "list_tables":
-            return await execute_tool(mcp_client, "list_tables", {})
-        elif tool_name == "describe_table":
-            return await execute_tool(mcp_client, "describe_table", {"table_name": tool_input.get("table_name", "")})
-        else:
-            print("\nResponse:", response_obj)
+            if tool_type == ToolType.READ_QUERY:
+                params = ToolType.get_param_schema(tool_type, tool_input.get("query", ""))
+            elif tool_type == ToolType.DESCRIBE_TABLE:
+                params = ToolType.get_param_schema(tool_type, tool_input.get("table_name", ""))
+            else:
+                params = ToolType.get_param_schema(tool_type)
+
+            return await execute_tool(mcp_client, tool_type.value, params)
+
+        except ValueError:
+            print(f"\nUnknown tool: {response_obj['name']}")
+            print(f"\nResponse:", response_obj)
+    else:
+        print("\nResponse:", response_obj)
 
 async def handle_direct_command(command, args, mcp_client):
-    """Handle direct commands like read_query, list_tables, and describe-table."""
-    if command == "read_query":
-        await execute_tool(mcp_client, "read_query", {"query": args})
-    elif command == "list_tables":
-        await execute_tool(mcp_client, "list_tables", {})
-    elif command == "describe_table":
-        print(f"table name {args}")
-        await execute_tool(mcp_client, "describe_table", {"table_name": args})
-    else:
-        print(f"Unknown command: {command}")
+    """Handle direct commands like read_query, list_tables, and describe-table using the ToolType enum."""
+    try:
+        tool_type = next((t for t in ToolType if t.value == command), None)
+
+        if tool_type:
+            params = ToolType.get_param_schema(tool_type, args)
+            await execute_tool(mcp_client, tool_type.value, params)
+        else:
+            print(f"Unknown command: {command}")
+    except Exception as e:
+        print("error handling command:", e)
+        print(traceback.format_exc())
 
 
 async def main():
