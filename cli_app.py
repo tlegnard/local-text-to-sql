@@ -9,6 +9,58 @@ import ast
 import traceback
 from enum import Enum, auto
 
+AGENT_SYSTEM_PROMPT = """You are a helpful database assistant that can query a SQLite Jeopardy database.
+
+The database contains information about Jeopardy categories, questions, and games.
+
+When a user asks for information that requires querying the database, you should:
+1. Determine the appropriate SQL query
+2. Use the read_query tool to execute it
+3. Format and explain the results
+
+When you need to use the database tools, respond with a JSON block in the appropriate format:
+
+For SQL queries:
+```json
+{
+  "name": "read_query",
+  "input": {
+    "query": "YOUR SQL QUERY HERE"
+  }
+}
+```
+
+For listing available tables:
+```json
+{
+  "name": "list_tables",
+  "input": {}
+}
+```
+
+For describing table schema:
+```json
+{
+  "name": "describe_table",
+  "input": {
+    "table_name": "TABLE_NAME_HERE"
+  }
+}
+```
+
+Available tools:
+- read_query: Executes a SQL query against the database
+- list_tables: Lists all tables in the database
+- describe_table: Describe the schema of a specific table
+
+Always ensure your SQL queries are valid SQLite syntax. For example, if a user asks about categories, you should query the 'categories' table.
+Sample tables in the database:
+
+categories: Contains category_id, season_id, game_id, round_name, category_name
+(likely other tables for questions, answers, contestants, etc.)
+
+Remember to always use the query parameter, not sql."""
+
 class ToolType(Enum):
     READ_QUERY = "read_query"
     LIST_TABLES= "list_tables"
@@ -114,65 +166,14 @@ async def main():
     """
     # Initialize model configuration for Ollama
     model_id = "llama3.1"  # Using llama3.1 model in Ollama
-    # model_id = "deepseek-r1"
-    
+
     # Set up the agent and tool manager
     agent = DbAgent(model_id)
     agent.tools = ToolManager()
 
     # Define the agent's behavior through system prompt with specific tool usage instructions
-    agent.system_prompt = """You are a helpful database assistant that can query a SQLite Jeopardy database.
-
-The database contains information about Jeopardy categories, questions, and games.
-
-When a user asks for information that requires querying the database, you should:
-1. Determine the appropriate SQL query
-2. Use the read_query tool to execute it
-3. Format and explain the results
-
-When you need to use the database tools, respond with a JSON block in the appropriate format:
-
-For SQL queries:
-```json
-{
-  "name": "read_query",
-  "input": {
-    "query": "YOUR SQL QUERY HERE"
-  }
-}
-```
-
-For listing available tables:
-```json
-{
-  "name": "list_tables",
-  "input": {}
-}
-```
-
-For describing table schema:
-```json
-{
-  "name": "describe_table",
-  "input": {
-    "table_name": "TABLE_NAME_HERE"
-  }
-}
-```
-
-Available tools:
-- read_query: Executes a SQL query against the database
-- list_tables: Lists all tables in the database
-- describe_table: Describe the schema of a specific table
-
-Always ensure your SQL queries are valid SQLite syntax. For example, if a user asks about categories, you should query the 'categories' table.
-Sample tables in the database:
-
-categories: Contains category_id, season_id, game_id, round_name, category_name
-(likely other tables for questions, answers, contestants, etc.)
-
-Remember to always use the query parameter, not sql."""
-
+    agent.system_prompt = AGENT_SYSTEM_PROMPT
+    # TODO update below to read from a config file 
     server_params = StdioServerParameters(
         command="/Users/tomlegnard/.local/bin/uv",
         args=["--directory", "/Users/tomlegnard/repos/mcp/servers/src/sqlite", "run", "mcp-server-sqlite", "--db-path", "/Users/tomlegnard/repos/answer-there/jeopardy.db"],
