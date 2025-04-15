@@ -6,7 +6,7 @@ from mcp_client import MCPClient
 import json
 import re
 import ast
-import traceback  # Added for better error tracing
+import traceback
 
 async def execute_tool(mcp_client, tool_name, input_params=None):
         """Execute a specific MCP tool and process it's results"""
@@ -40,17 +40,42 @@ async def process_tool_result(result):
     else:
         print(result)
 
+async def process_and_execute_tool_response(response, mcp_client):
+    """Parse a response and execute the appropriate tool if suggested."""
+    response_obj = response
+    if isinstance(response, str) and response.strip().startswith('{') \
+        and response.strip().endswith('}'):
+        try:
+            response_obj = json.loads(response)
+        except json.JSONDecodeError:
+            print("\nResponse (as text):", response)
+            return
 
-async def mcp_read_query(mcp_client, sql):
-    try:
-        result = await mcp_client.call_tool("read_query", {"query": sql})
-        print("\nQuery result:")
-        # print(result)  # This might be printing a complex object that doesn't format well
-        await process_tool_result(result)
+    if isinstance(response_obj, dict) and "name" in response_obj \
+        and "input" in response_obj:
+        tool_name = response_obj["name"]
+        tool_input = response_obj["input"]
 
-    except Exception as e:
-        print(f"SQL query error: {e}")
-        print(traceback.format_exc())  # Print stack trace for debugging
+        if tool_name == "read_query":
+            return await execute_tool(mcp_client, "read_query", {"query": tool_input.get("query","")})
+        elif tool_name == "list_tables":
+            return await execute_tool(mcp_client, "list_tables", {})
+        elif tool_name == "describe_table":
+            return await execute_tool(mcp_client, "describe_table", {"table_name": tool_input.get("table_name", "")})
+        else:
+            print("\nResponse:", response_obj)
+
+async def handle_direct_command(command, args, mcp_client):
+    """Handle direct commands like read_query, list_tables, and describe-table."""
+    if command == "read_query":
+        await execute_tool(mcp_client, "read_query", {"query": args})
+    elif command == "list_tables":
+        await execute_tool(mcp_client, "list_tables", {})
+    elif command == "describe_table":
+        print(f"table name {args}")
+        await execute_tool(mcp_client, "describe_table", {"table_name": args})
+    else:
+        print(f"Unknown command: {command}")
 
 
 async def main():
@@ -119,7 +144,6 @@ categories: Contains category_id, season_id, game_id, round_name, category_name
 
 Remember to always use the query parameter, not sql."""
 
-    # Create server parameters for SQLite configuration
     server_params = StdioServerParameters(
         command="/Users/tomlegnard/.local/bin/uv",
         args=["--directory", "/Users/tomlegnard/repos/mcp/servers/src/sqlite", "run", "mcp-server-sqlite", "--db-path", "/Users/tomlegnard/repos/answer-there/jeopardy.db"],
@@ -129,15 +153,13 @@ Remember to always use the query parameter, not sql."""
     # Initialize MCP client with server parameters
     async with MCPClient(server_params) as mcp_client:
 
-        # Fetch available tools from the MCP client
         tools = await mcp_client.get_available_tools()
         
         print("Available tools:")
         for tool in tools:
             print(f"- {tool.name}: {tool.description}")
             print(f"  Input schema: {tool.inputSchema}")
-            
-            # Register the tool with the agent
+
             agent.tools.register_tool(
                 name=tool.name,
                 func=mcp_client.call_tool,
@@ -145,36 +167,24 @@ Remember to always use the query parameter, not sql."""
                 input_schema=tool.inputSchema
             )
 
-        # Start interactive prompt loop
+
         print("\nDatabase assistant ready! Type SQL queries or questions about your database.")
         print("Example: 'read_query select * from sqlite_master;'")
         print("Additional commands: 'list_tables', 'describe_table <table_name>'")
+        print("You may also direct the assistant to find specific data points and it will attemp to write and run the SQl for you!")
         
         while True:
             try:
-                # Get user input and check for exit commands
+
                 user_prompt = input("\nEnter your prompt (or 'quit' to exit): ")
                 if user_prompt.lower() in ['quit', 'exit', 'q']:
                     break
-                
-                # Special case for direct SQL queries
-                if user_prompt.strip().startswith('read_query '):
-                    sql = user_prompt.replace('read_query ', '', 1).strip()
-                    # Remove quotes if they're present
-                    if (sql.startswith("'") and sql.endswith("'")) or (sql.startswith('"') and sql.endswith('"')):
-                        sql = sql[1:-1]
-                    
-                    # Execute direct SQL query
-                    await mcp_read_query(mcp_client, sql)
-                
 
-                elif user_prompt.strip() == 'list_tables':
-                    await execute_tool(mcp_client, "list_tables", {})
-                
-                elif user_prompt.strip().startswith('describe_table '):
-                    table_name = user_prompt.replace('describe_table ', '', 1).strip()
-                    await execute_tool(mcp_client, "describe_table", {"table_name": table_name})
-                    
+                command_match = re.match(r'(read_query|list_tables|describe_table)\s*(.*)', user_prompt.strip())
+                if command_match:
+                    command, args = command_match.groups()
+                    await handle_direct_command(command, args.strip(), mcp_client)
+
                 else:
                     # Process natural language prompt through the agent
                     print(f"\nProcessing: '{user_prompt}'")
@@ -186,53 +196,9 @@ Remember to always use the query parameter, not sql."""
                         if not response:
                             print("Received empty response from agent.")
                             continue
-                        
-                        # Handle different response types
-                        if isinstance(response, dict):
-                            # If it's already a dictionary, process it directly
-                            if "name" in response and response["name"] == "read_query" and "input" in response:
-                                print(f"Executing query: {response['input'].get('query', '')}")
-                                await mcp_read_query(mcp_client, response["input"].get("query", ""))
-                            elif "name" in response and response["name"] == "list_tables":
-                                print("Listing all tables in the database:")
-                                result = await mcp_client.call_tool("list_tables", {})
-                                await process_tool_result(result)
-                            elif "name" in response and response["name"] == "describe_table":
-                                print(f"Describing table: {response['input'].get('table_name', 'Unknown')}")
-                                result = await mcp_client.call_tool("describe_table", {"table_name": response['input'].get('table_name', '')})
-                                await process_tool_result(result)
-                            else:
-                                print("\nResponse:", response)
-                        
-                        elif isinstance(response, str):
-                            # Try to parse as JSON if it looks like a JSON string
-                            if response.strip().startswith('{') and response.strip().endswith('}'):
-                                try:
-                                    response_obj = json.loads(response)
-                                    print(f"Response parsed as JSON: {response_obj}")
-                                    
-                                    if "name" in response_obj and response_obj["name"] == "read_query" and "input" in response_obj:
-                                        await mcp_read_query(mcp_client, response_obj["input"].get("query", ""))
-                                    elif "name" in response_obj and response_obj["name"] == "list_tables":
-                                        print("Listing all tables in the database:")
-                                        result = await mcp_client.call_tool("list_tables", {})
-                                        await process_tool_result(result)
-                                    elif "name" in response_obj and response_obj["name"] == "describe_table":
-                                        print(f"Describing table: {response_obj['input'].get('table_name', 'Unknown')}")
-                                        result = await mcp_client.call_tool("describe_table", {"table_name": response_obj['input'].get('table_name', '')})
-                                        await process_tool_result(result)
-                                    else:
-                                        print("\nResponse:", response_obj)
-                                except json.JSONDecodeError:
-                                    # If it's not valid JSON, just show the text
-                                    print("\nResponse (as text):", response)
-                            else:
-                                # It's a regular text response
-                                print("\nResponse:", response)
-                        else:
-                            print(f"\nUnexpected response type: {type(response)}")
-                            print("\nResponse:", response)
-                        
+
+                        await process_and_execute_tool_response(response, mcp_client)
+
                     except Exception as e:
                         print(f"\nError processing prompt: {e}")
                         print(f"response type: {type(response) if 'response' in locals() else 'No response'}")
@@ -249,7 +215,6 @@ Remember to always use the query parameter, not sql."""
                 print("Try using a query directly with 'read_query <your SQL>'")
 
 if __name__ == "__main__":
-    # Run the async main function
     asyncio.run(main())
 
 
