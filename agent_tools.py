@@ -9,6 +9,8 @@ import ast
 import traceback
 from enum import Enum, auto
 
+MODEL_ID = "llama3.1"  # Using llama3.1 model in Ollama
+
 AGENT_SYSTEM_PROMPT = """You are a helpful database assistant that can query a SQLite Jeopardy database.
 
 The database contains information about Jeopardy categories, questions, and games.
@@ -165,10 +167,10 @@ async def main():
     The agent can process user prompts and utilize registered tools to perform tasks with Ollama.
     """
     # Initialize model configuration for Ollama
-    model_id = "llama3.1"  # Using llama3.1 model in Ollama
+
 
     # Set up the agent and tool manager
-    agent = DbAgent(model_id)
+    agent = DbAgent(MODEL_ID)
     agent.tools = ToolManager()
 
     # Define the agent's behavior through system prompt with specific tool usage instructions
