@@ -1,7 +1,7 @@
 import json
 import re
 import requests
-
+#TODO move some of the prints into DEBBUG logging level
 class DbAgent:
     def __init__(self, model_id, base_url='http://localhost:11434', system_prompt='You are a helpful assistant.'):
         self.model_id = model_id
